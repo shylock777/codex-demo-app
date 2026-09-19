@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Codex Demo · DeepSeek 聊天</title>
+  <title>Codex Demo · DeepSeek + Supabase</title>
   <style>
     body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 0 auto; padding: 24px; background: #f7f8fa; }
     h1 { font-size: 20px; }
@@ -20,23 +20,57 @@
 </head>
 <body>
   <h1>Codex 全栈工作流 Demo</h1>
-  <p class="sys">本地 VS Code + Codex → GitHub → Vercel 自动部署 → DeepSeek API。输入一句话试试：</p>
-  <div id="log"><div class="msg sys">还没对话，在下方输入。</div></div>
+  <p class="sys">DeepSeek 聊天 + Supabase 持久化。消息自动存库，刷新不丢。</p>
+  <div id="log"><div class="msg sys">加载历史消息中…</div></div>
   <form id="f">
     <input id="q" placeholder="问点什么，例如：用一句话解释什么是全栈工作流" autocomplete="off" />
     <button id="btn" type="submit">发送</button>
   </form>
-  <script>
+
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const SUPABASE_URL = "https://ydytfdejimvydsrybcut.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_EtWvALNeAmREG9H_i4QRlQ_XgD0nsX1";
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     const log = document.getElementById('log');
     const form = document.getElementById('f');
     const input = document.getElementById('q');
     const btn = document.getElementById('btn');
+
+    function append(who, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (who === 'you' ? 'you' : who === 'ai' ? 'ai' : 'sys');
+      div.textContent = (who === 'you' ? '你：' : who === 'ai' ? 'DeepSeek：' : '') + text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // 启动时读历史
+    async function loadHistory() {
+      const { data, error } = await sb
+        .from('messages')
+        .select('role, content')
+        .order('created_at', { ascending: true })
+        .limit(50);
+      log.innerHTML = '';
+      if (error) { append('sys', '读历史失败：' + error.message + '（请先在 Supabase SQL Editor 跑建表 SQL）'); return; }
+      if (!data || data.length === 0) { append('sys', '还没有历史消息，在下方输入。'); return; }
+      for (const m of data) append(m.role === 'user' ? 'you' : 'ai', m.content);
+    }
+    loadHistory();
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-      log.insertAdjacentHTML('beforeend', `<div class="msg you">你：${text}</div>`);
+      append('you', text);
       input.value = ''; btn.disabled = true;
+
+      // 存 user 消息
+      await sb.from('messages').insert({ role: 'user', content: text });
+
       const pending = document.createElement('div');
       pending.className = 'msg ai'; pending.textContent = 'DeepSeek 思考中…';
       log.appendChild(pending); log.scrollTop = log.scrollHeight;
@@ -47,7 +81,9 @@
           body: JSON.stringify({ message: text }),
         });
         const data = await r.json();
-        pending.textContent = r.ok ? ('DeepSeek：' + data.reply) : ('出错了：' + JSON.stringify(data.error || data));
+        const reply = r.ok ? data.reply : ('出错了：' + JSON.stringify(data.error || data));
+        pending.textContent = 'DeepSeek：' + reply;
+        await sb.from('messages').insert({ role: 'assistant', content: reply });
       } catch (err) {
         pending.textContent = '网络错误：' + err;
       }
