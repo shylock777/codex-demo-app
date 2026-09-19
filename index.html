@@ -1,8 +1,58 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>My Codex Demo</title></head>
-<body style="font-family:sans-serif;max-width:640px;margin:60px auto;">
-<h1>Hello from Codex Workflow</h1>
-<p>这是一条验证整条工作流的页面：本地 VS Code + Codex → GitHub → Vercel 自动部署。</p>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codex Demo · DeepSeek 聊天</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 0 auto; padding: 24px; background: #f7f8fa; }
+    h1 { font-size: 20px; }
+    #log { background:#fff; border:1px solid #e2e2e2; border-radius:10px; padding:16px; height: 360px; overflow-y:auto; margin-bottom:12px; }
+    .msg { margin-bottom: 10px; line-height:1.5; }
+    .you { color:#1a73e8; font-weight:600; }
+    .ai { color:#188038; white-space: pre-wrap; }
+    .sys { color:#999; font-size:12px; }
+    form { display:flex; gap:8px; }
+    input { flex:1; padding:10px 12px; border:1px solid #ccc; border-radius:8px; font-size:14px; }
+    button { padding:10px 18px; border:0; border-radius:8px; background:#1a73e8; color:#fff; font-size:14px; cursor:pointer; }
+    button:disabled { opacity:.5; }
+  </style>
+</head>
+<body>
+  <h1>Codex 全栈工作流 Demo</h1>
+  <p class="sys">本地 VS Code + Codex → GitHub → Vercel 自动部署 → DeepSeek API。输入一句话试试：</p>
+  <div id="log"><div class="msg sys">还没对话，在下方输入。</div></div>
+  <form id="f">
+    <input id="q" placeholder="问点什么，例如：用一句话解释什么是全栈工作流" autocomplete="off" />
+    <button id="btn" type="submit">发送</button>
+  </form>
+  <script>
+    const log = document.getElementById('log');
+    const form = document.getElementById('f');
+    const input = document.getElementById('q');
+    const btn = document.getElementById('btn');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      log.insertAdjacentHTML('beforeend', `<div class="msg you">你：${text}</div>`);
+      input.value = ''; btn.disabled = true;
+      const pending = document.createElement('div');
+      pending.className = 'msg ai'; pending.textContent = 'DeepSeek 思考中…';
+      log.appendChild(pending); log.scrollTop = log.scrollHeight;
+      try {
+        const r = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+        });
+        const data = await r.json();
+        pending.textContent = r.ok ? ('DeepSeek：' + data.reply) : ('出错了：' + JSON.stringify(data.error || data));
+      } catch (err) {
+        pending.textContent = '网络错误：' + err;
+      }
+      log.scrollTop = log.scrollHeight; btn.disabled = false; input.focus();
+    });
+  </script>
 </body>
 </html>
